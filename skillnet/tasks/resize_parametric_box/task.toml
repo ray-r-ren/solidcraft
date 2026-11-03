@@ -1,0 +1,46 @@
+schema_version = "1.4"
+source = "skillnet"
+artifacts = ["/task/outputs", "/task/answer.txt"]
+
+[task]
+name = "skillnet/parametric-cad-studio-resize_parametric_box"
+description = "Parametric CAD Studio — Change parameters: Here's my parametric mounting block design, mount_block.sc. Please make it 70 mm wide instead of 40 mm, keeping everything else the same (depth, height and the "
+keywords = ["skillnet", "parametric-cad-studio", "change-parameters"]
+
+[[task.authors]]
+name = "SkillNet Agent"
+
+[metadata]
+[metadata.skillnet]
+skill = "parametric-cad-studio"
+version = 2
+task = "resize_parametric_box"
+ability = "Change parameters"
+core = true
+source = "builder"
+judge = "programmatic"
+prompt = "Here's my parametric mounting block design, mount_block.sc. Please make it 70 mm wide instead of 40 mm, keeping everything else the same (depth, height and the through hole).\n\nSend me the updated editable design and an STL I can print."
+
+[agent]
+timeout_sec = 900
+user = "agent"
+
+[verifier]
+timeout_sec = 600
+environment_mode = "separate"
+
+[environment]
+build_timeout_sec = 1800
+cpus = 2
+memory_mb = 4096
+workdir = "/task"
+network_mode = "allowlist"
+allowed_hosts = ["skillnet.sh"]
+
+[[environment.mcp_servers]]
+name = "skillnet"
+transport = "streamable-http"
+url = "https://skillnet.sh/mcp"
+
+[environment.mcp_servers.headers]
+Authorization = "Bearer ${SKILLNET_API_KEY}"

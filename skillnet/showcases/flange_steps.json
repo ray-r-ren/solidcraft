@@ -1,0 +1,91 @@
+{
+ "commands": [
+  {
+   "command": "parameters.add",
+   "params": {
+    "name": "od",
+    "expression": "80 mm"
+   }
+  },
+  {
+   "command": "parameters.add",
+   "params": {
+    "name": "thk",
+    "expression": "8 mm"
+   }
+  },
+  {
+   "command": "parameters.add",
+   "params": {
+    "name": "bolt_d",
+    "expression": "6 mm"
+   }
+  },
+  {
+   "command": "parameters.add",
+   "params": {
+    "name": "pcd",
+    "expression": "60 mm"
+   }
+  },
+  {
+   "command": "sketch.create",
+   "params": {
+    "plane": "XY"
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     0,
+     0
+    ],
+    "diameter": "od"
+   }
+  },
+  {
+   "command": "sketch.circle.center",
+   "params": {
+    "center": [
+     0,
+     0
+    ],
+    "diameter": 30
+   }
+  },
+  {
+   "command": "sketch.finish",
+   "params": {}
+  },
+  {
+   "command": "solid.extrude",
+   "params": {
+    "distance": "thk",
+    "name": "Disc"
+   }
+  },
+  {
+   "command": "solid.hole",
+   "params": {
+    "position": [
+     "pcd/2",
+     0,
+     "thk"
+    ],
+    "diameter": "bolt_d",
+    "name": "Bolt"
+   }
+  },
+  {
+   "command": "solid.pattern.circular",
+   "params": {
+    "features": [
+     "Bolt"
+    ],
+    "axis": "Z",
+    "count": 6
+   }
+  }
+ ]
+}

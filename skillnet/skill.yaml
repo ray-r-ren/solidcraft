@@ -1,0 +1,702 @@
+manifest_version: 1
+name: Parametric CAD Studio
+slug: parametric-cad-studio
+superpower: Describe a part. Get an editable parametric 3D model with print-ready and CAD files.
+category: engineering-hardware
+cant_do:
+  - Slice to G-code or estimate print time (use a slicer on the exported STL/3MF)
+  - Open native SolidWorks, Fusion, Inventor or Onshape files (export STEP from them first)
+  - Turn a photo or drawing into a model automatically (the agent must write the steps)
+  - Drive the SolidCraft desktop app live on your computer (runs headless only)
+  - Stress, thermal or other simulation (FEA)
+  - CAM toolpaths or CNC programs
+  - Photorealistic product renders (pictures are viewport-style)
+example_prompts:
+  - Make a 60 × 40 × 25 mm project box with 2 mm walls, rounded corners and four M3 screw bosses; give me STEP and STL
+  - Design an L-bracket 50 mm tall with two 5 mm mounting holes and a 3 mm fillet, and show me an iso view
+  - Here's my enclosure.sc — change width to 80 and wall to 2.5 and re-export the 3MF
+  - What's the volume and bounding box of this STEP file, and how big is the hole in it?
+  - Check this part is watertight and print-ready, then export it as 3MF
+engines: []
+resources:
+  cpu: 2
+  memory_mib: 4096
+  gpu: null
+  timeout_s: 600
+  max_input_mb: 200
+egress: []
+credentials: []
+agent_side: []
+cost:
+  typical_seconds: 15
+sdk_version: 0.3.0
+tools_package: tools
+tools:
+  - name: build_part
+    title: Build a parametric part from CAD steps
+    kind: create
+    description: Use when the user describes a part to model (bracket, box, enclosure, plate, spacer…) or wants features added to an existing design. Runs your list of CAD commands (parameters.add, sketch.create, sketch.rectangle.center, sketch.finish, solid.extrude, solid.fillet, solid.hole…) headless, optionally on top of a design from start_from, and returns the editable .sc design plus STEP/STL/3MF with measured volume, bounding box, bodies, parameters and timeline. If any step fails nothing is written and the error names the step index and the engine's reason. Verify after with measure_features or render_views.
+    input_schema:
+      additionalProperties: false
+      properties:
+        steps:
+          anyOf:
+            - items:
+                type: object
+              type: array
+            - type: object
+            - type: string
+          description: "The CAD commands to run, in order: a list of {\"command\": id, \"params\": {...}} (or {\"commands\": [...]}, or the same as a JSON string). Lengths in mm; any numeric field can be an expression naming…"
+        start_from:
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .3mf
+            - .iges
+            - .igs
+            - .obj
+            - .sc
+            - .solidcraft
+            - .step
+            - .stl
+            - .stp
+          description: "Optional design to build on: a .sc design from an earlier build_part call (keeps its parameters and timeline), or a STEP/IGES/STL/3MF/OBJ to use as the base body."
+        name:
+          default: part
+          description: Base name for the output files, e.g. 'bracket'.
+          type: string
+        formats:
+          description: "Files to export besides the editable .sc design: step (CAD), stl and 3mf (3D printing), obj, iges. Default step, stl, 3mf."
+          items:
+            enum:
+              - step
+              - stl
+              - 3mf
+              - obj
+              - iges
+            type: string
+          type: array
+      required:
+        - steps
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        design_file:
+          description: The editable design (.sc) to pass to change_parameters, inspect_design, render_views, export_model or build_part start_from.
+          type: string
+        files:
+          items:
+            type: string
+          type: array
+        step_count:
+          type: integer
+        bodies:
+          items:
+            type: object
+          type: array
+        body_count:
+          type: integer
+        total_volume_mm3:
+          anyOf:
+            - type: number
+            - type: "null"
+        bbox_mm:
+          anyOf:
+            - type: object
+            - type: "null"
+          description: Overall {min, max, size} in mm.
+        parameters:
+          items:
+            type: object
+          type: array
+        feature_count:
+          type: integer
+        features:
+          items:
+            type: object
+          type: array
+        sketches:
+          items:
+            type: object
+          type: array
+      required:
+        - design_file
+        - files
+        - step_count
+        - bodies
+        - body_count
+        - total_volume_mm3
+        - bbox_mm
+        - parameters
+        - feature_count
+        - features
+        - sketches
+      type: object
+    long_running: false
+    timeout_s: 300
+  - name: change_parameters
+    title: Change a design's parameters and rebuild
+    kind: edit
+    description: Use when the user wants an existing parametric design resized or tweaked by name ('make it 80 wide', 'wall 2.5 mm', 'hole 6 mm'). Sets each named parameter (number or expression with unit), rebuilds the whole timeline, and returns the updated .sc design and STEP/STL/3MF with before/after volume and bounding box. If the new values make a feature fail, nothing is written and the error names the feature and why. Call inspect_design first to see the parameter names.
+    input_schema:
+      additionalProperties: false
+      properties:
+        design:
+          description: The editable SolidCraft design (.sc) from build_part or the user.
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .sc
+            - .solidcraft
+        changes:
+          additionalProperties:
+            anyOf:
+              - type: number
+              - type: integer
+              - type: string
+          description: "Parameter name → new value. A number keeps the parameter's unit (mm for lengths); a string can carry a unit or be an expression: {\"width\": 80, \"wall\": \"2.5 mm\", \"depth\": \"1 in\", \"lid\": \"height/4\"}."
+          type: object
+        create_missing:
+          default: false
+          description: Create parameters that don't exist yet instead of failing (a new parameter changes nothing until a feature uses it).
+          type: boolean
+        formats:
+          description: "Files to export from the updated design: step, stl, 3mf, obj, iges. Default step, stl, 3mf."
+          items:
+            enum:
+              - step
+              - stl
+              - 3mf
+              - obj
+              - iges
+            type: string
+          type: array
+        name:
+          type: string
+          description: "Base name for the output files (default: the design's name with '_v2')."
+      required:
+        - design
+        - changes
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        design_file:
+          type: string
+        files:
+          items:
+            type: string
+          type: array
+        changed:
+          items:
+            additionalProperties: false
+            properties:
+              name:
+                type: string
+              old:
+                anyOf:
+                  - type: string
+                  - type: "null"
+              new:
+                type: string
+              old_value:
+                anyOf:
+                  - type: number
+                  - type: "null"
+              new_value:
+                anyOf:
+                  - type: number
+                  - type: "null"
+              created:
+                default: false
+                type: boolean
+            required:
+              - name
+              - old
+              - new
+              - old_value
+              - new_value
+            type: object
+          type: array
+        recomputed_features:
+          anyOf:
+            - type: integer
+            - type: "null"
+        failing_features:
+          items:
+            type: object
+          type: array
+        before:
+          additionalProperties: false
+          properties:
+            volume_mm3:
+              anyOf:
+                - type: number
+                - type: "null"
+            bbox_mm:
+              anyOf:
+                - type: object
+                - type: "null"
+          required:
+            - volume_mm3
+            - bbox_mm
+          type: object
+        after:
+          additionalProperties: false
+          properties:
+            volume_mm3:
+              anyOf:
+                - type: number
+                - type: "null"
+            bbox_mm:
+              anyOf:
+                - type: object
+                - type: "null"
+          required:
+            - volume_mm3
+            - bbox_mm
+          type: object
+        bodies:
+          items:
+            type: object
+          type: array
+        parameters:
+          items:
+            type: object
+          type: array
+      required:
+        - design_file
+        - files
+        - changed
+        - recomputed_features
+        - failing_features
+        - before
+        - after
+        - bodies
+        - parameters
+      type: object
+    long_running: false
+    timeout_s: 300
+  - name: export_model
+    title: Export CAD and print-ready files
+    kind: export
+    description: Use when the user wants a part in another format (STEP for CAD, STL or 3MF for 3D printing, OBJ, IGES) or asks whether it's print-ready. Exports the design, then checks every mesh (watertight, consistent winding, number of shells, mesh volume vs the exact solid volume, size in mm) and re-opens STEP/IGES to confirm the volume. print_ready is true only when the mesh is closed, consistent and within 0.5% of the solid's volume. Use as the final step; slicing to G-code is not included.
+    input_schema:
+      additionalProperties: false
+      properties:
+        file:
+          description: "The part to export: .sc design (best), STEP/IGES, or a mesh (STL/3MF/OBJ)."
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .3mf
+            - .iges
+            - .igs
+            - .obj
+            - .sc
+            - .solidcraft
+            - .step
+            - .stl
+            - .stp
+        formats:
+          description: "Formats to write: step (CAD, 'STP'), iges, stl and 3mf (3D printing / slicers), obj. Default step, 3mf, stl."
+          items:
+            enum:
+              - step
+              - iges
+              - stl
+              - 3mf
+              - obj
+            type: string
+          minItems: 1
+          type: array
+        quality:
+          default: standard
+          description: "Mesh density for stl/3mf/obj: standard, fine, finest (smoother curves, bigger files)."
+          enum:
+            - standard
+            - fine
+            - finest
+          type: string
+        name:
+          type: string
+          description: "Base name for the files (default: the input's name)."
+      required:
+        - file
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            additionalProperties: false
+            properties:
+              format:
+                type: string
+              file:
+                type: string
+              bytes:
+                type: integer
+            required:
+              - format
+              - file
+              - bytes
+            type: object
+          type: array
+        brep_volume_mm3:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: Exact solid volume of the source (None for mesh inputs).
+        mesh_checks:
+          items:
+            type: object
+          type: array
+        cad_checks:
+          items:
+            type: object
+          type: array
+        print_ready:
+          type: boolean
+        print_problems:
+          items:
+            type: string
+          type: array
+      required:
+        - files
+        - brep_volume_mm3
+        - mesh_checks
+        - cad_checks
+        - print_ready
+        - print_problems
+      type: object
+    long_running: false
+    timeout_s: 300
+  - name: find_cad_commands
+    title: Find CAD commands and their parameters
+    kind: inspect
+    description: Use before writing build steps, when you need the exact command id and parameters for a CAD operation (sketch rectangle/circle, extrude, fillet, chamfer, hole, shell, pattern, mirror, parameters). Searches the CAD engine's live command registry and returns each match's id, label and the engine's own parameter docs. Start here if unsure how to express a feature, then call build_part.
+    input_schema:
+      additionalProperties: false
+      properties:
+        query:
+          default: ""
+          description: Words matched against each command's id, label, toolbar tab and panel, e.g. 'fillet', 'hole', 'sketch circle', 'pattern circular', 'parameter'. Empty lists every command id and writes the full…
+          type: string
+        limit:
+          default: 12
+          description: Most matches to return (1-200, default 12).
+          maximum: 200
+          minimum: 1
+          type: integer
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+        total_commands:
+          type: integer
+        match_count:
+          type: integer
+        matches:
+          items:
+            additionalProperties: false
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              tab:
+                type: string
+              panel:
+                type: string
+              params_doc:
+                description: The engine's own parameter documentation for this command.
+                type: string
+            required:
+              - id
+              - label
+              - params_doc
+            type: object
+          type: array
+        all_ids:
+          items:
+            type: string
+          type: array
+          description: Every command id (only when query is empty).
+      required:
+        - version
+        - total_commands
+        - match_count
+        - matches
+      type: object
+    long_running: false
+    timeout_s: 60
+  - name: inspect_design
+    title: Inspect a design, STEP or mesh file
+    kind: inspect
+    description: Use when the user gives a CAD or mesh file and asks what's in it (size, volume, weight, parameters), or after build_part/change_parameters to verify. Returns parameters, timeline features with errors and warnings, bodies with volume, area, centre of mass, bounding box and face/edge counts, and sketches with their free degrees of freedom. detail='topology' adds every face and edge (a point on each face, edge midpoints, cylinder radii) — the exact picks fillet, chamfer, shell and measure_features need.
+    input_schema:
+      additionalProperties: false
+      properties:
+        file:
+          description: "The design or model: SolidCraft .sc/.solidcraft, STEP/STP, IGES, STL, 3MF or OBJ."
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .3mf
+            - .iges
+            - .igs
+            - .obj
+            - .sc
+            - .solidcraft
+            - .step
+            - .stl
+            - .stp
+        detail:
+          default: summary
+          description: "summary: parameters, features, bodies, sketches. full: also sketch-dimension parameters and (for .sc) the design's full history as a command script file. topology: also every face and edge (names, a…"
+          enum:
+            - summary
+            - full
+            - topology
+          type: string
+      required:
+        - file
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        file_kind:
+          enum:
+            - design
+            - cad
+            - mesh
+          type: string
+        body_count:
+          type: integer
+        total_volume_mm3:
+          anyOf:
+            - type: number
+            - type: "null"
+        total_area_mm2:
+          anyOf:
+            - type: number
+            - type: "null"
+        bbox_mm:
+          anyOf:
+            - type: object
+            - type: "null"
+        bodies:
+          items:
+            type: object
+          type: array
+        parameters:
+          items:
+            type: object
+          type: array
+        features:
+          items:
+            type: object
+          type: array
+        failing_features:
+          items:
+            type: object
+          type: array
+        sketches:
+          items:
+            type: object
+          type: array
+        topology:
+          type: object
+          description: Per body faces/edges (only with detail='topology' and when small enough; always in topology.json).
+      required:
+        - file_kind
+        - body_count
+        - total_volume_mm3
+        - total_area_mm2
+        - bbox_mm
+        - bodies
+        - parameters
+        - features
+        - failing_features
+        - sketches
+      type: object
+    long_running: false
+    timeout_s: 180
+  - name: measure_features
+    title: Measure holes, faces, edges and distances
+    kind: measure
+    description: "Use to check one exact dimension: a hole's diameter, an edge's length, a wall's thickness, the distance or angle between two faces. Takes one or two picks, each a point on the item ([x,y,z] mm, from inspect_design detail='topology') or a face/edge name, and returns length, area, diameter/radius/centre/axis for round items, and min/max/centre distance and angle for two picks. Works on exact solids (.sc, STEP, IGES), not meshes."
+    input_schema:
+      additionalProperties: false
+      properties:
+        file:
+          description: The design (.sc) or STEP/IGES file to measure.
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .sc
+            - .solidcraft
+            - .step
+            - .stp
+            - .iges
+            - .igs
+        items:
+          description: "One pick (its size: diameter, length, area) or two (distance and angle between them)."
+          items:
+            additionalProperties: false
+            properties:
+              kind:
+                description: "What to measure: face (a hole's wall, a flat side), edge, or vertex (a corner)."
+                enum:
+                  - face
+                  - edge
+                  - vertex
+                type: string
+              point:
+                items:
+                  type: number
+                maxItems: 3
+                minItems: 3
+                type: array
+                description: "[x, y, z] in mm on or near the item (from inspect_design detail='topology': a face's point, an edge's mid)."
+              name:
+                type: string
+                description: "Instead of point: the face or edge name from inspect_design detail='topology', e.g. 'F2:top' or 'F3:bore:side:0'."
+              body:
+                type: string
+                description: Body name; needed only when the file has several bodies.
+            required:
+              - kind
+            type: object
+          maxItems: 2
+          minItems: 1
+          type: array
+      required:
+        - file
+        - items
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            type: object
+          type: array
+        min_distance_mm:
+          type: number
+          description: Closest distance between the two picks (wall-to-wall for two holes; the thickness for two parallel faces).
+        max_distance_mm:
+          type: number
+          description: Farthest distance between the two picks.
+        center_distance_mm:
+          type: number
+          description: Axis-to-axis distance between two round items (hole spacing); None when either pick isn't round.
+        angle_deg:
+          type: number
+      required:
+        - items
+      type: object
+    long_running: false
+    timeout_s: 120
+  - name: render_views
+    title: Render pictures of a part
+    kind: export
+    description: Use when the user wants to see the part or you need to visually check a build (a hole in the right place, a fillet on the right edge). Renders viewport-style PNGs of a design, CAD or mesh file from standard views (iso, front, back, top, bottom, left, right), headless, plus a contact sheet of all views. If the CAD renderer fails it falls back to a simpler shaded mesh picture and says so in uncertain. Not for photorealistic product renders.
+    input_schema:
+      additionalProperties: false
+      properties:
+        file:
+          description: "The part to draw: .sc design, STEP, IGES, STL, 3MF or OBJ."
+          format: skillnet-file
+          type: string
+          x-accept:
+            - .3mf
+            - .iges
+            - .igs
+            - .obj
+            - .sc
+            - .solidcraft
+            - .step
+            - .stl
+            - .stp
+        views:
+          description: "Views to draw: iso, front, back, top, bottom, left, right (default iso, front, top, right)."
+          items:
+            enum:
+              - iso
+              - front
+              - back
+              - top
+              - bottom
+              - left
+              - right
+            type: string
+          maxItems: 7
+          minItems: 1
+          type: array
+        width:
+          default: 1024
+          description: Picture width in pixels (256-2560).
+          maximum: 2560
+          minimum: 256
+          type: integer
+        height:
+          default: 768
+          description: Picture height in pixels (256-2560).
+          maximum: 2560
+          minimum: 256
+          type: integer
+        grid:
+          default: true
+          description: Draw the ground grid at Z=0 (turn off for clean pictures).
+          type: boolean
+      required:
+        - file
+      type: object
+    output_schema:
+      additionalProperties: false
+      properties:
+        views:
+          items:
+            additionalProperties: false
+            properties:
+              view:
+                type: string
+              file:
+                type: string
+              renderer:
+                type: string
+              pixel_stddev:
+                type: number
+            required:
+              - view
+              - file
+              - renderer
+              - pixel_stddev
+            type: object
+          type: array
+        renderer_used:
+          type: string
+        contact_sheet:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - views
+        - renderer_used
+        - contact_sheet
+      type: object
+    long_running: false
+    timeout_s: 300
+datasets: []
+workers: []
+source:
+  kind: import
+  repo: https://github.com/ray-r-ren/solidcraft
+  commit: 147b4049cf6db6e23c687f4550ebbe4272880437
+  license: Apache-2.0
+  author: ray-r-ren

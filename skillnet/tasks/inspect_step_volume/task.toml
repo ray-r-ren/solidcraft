@@ -1,0 +1,46 @@
+schema_version = "1.4"
+source = "skillnet"
+artifacts = ["/task/outputs", "/task/answer.txt"]
+
+[task]
+name = "skillnet/parametric-cad-studio-inspect_step_volume"
+description = "Parametric CAD Studio — Inspect and measure designs: A supplier sent me this STEP file, bracket_rev3.step. Before I quote it, I need two numbers: its overall size (length × width × height in mm) and its volume in "
+keywords = ["skillnet", "parametric-cad-studio", "inspect-and-measure-designs"]
+
+[[task.authors]]
+name = "SkillNet Agent"
+
+[metadata]
+[metadata.skillnet]
+skill = "parametric-cad-studio"
+version = 2
+task = "inspect_step_volume"
+ability = "Inspect and measure designs"
+core = true
+source = "builder"
+judge = "programmatic"
+prompt = "A supplier sent me this STEP file, bracket_rev3.step. Before I quote it, I need two numbers: its overall size (length × width × height in mm) and its volume in cubic centimetres. Please give me both."
+
+[agent]
+timeout_sec = 900
+user = "agent"
+
+[verifier]
+timeout_sec = 600
+environment_mode = "separate"
+
+[environment]
+build_timeout_sec = 1800
+cpus = 2
+memory_mb = 4096
+workdir = "/task"
+network_mode = "allowlist"
+allowed_hosts = ["skillnet.sh"]
+
+[[environment.mcp_servers]]
+name = "skillnet"
+transport = "streamable-http"
+url = "https://skillnet.sh/mcp"
+
+[environment.mcp_servers.headers]
+Authorization = "Bearer ${SKILLNET_API_KEY}"

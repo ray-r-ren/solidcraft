@@ -1,0 +1,46 @@
+schema_version = "1.4"
+source = "skillnet"
+artifacts = ["/task/outputs", "/task/answer.txt"]
+
+[task]
+name = "skillnet/parametric-cad-studio-render_iso_view"
+description = "Parametric CAD Studio — Render views: I have a flange model, flange.step, but no CAD viewer on this computer. Please render an isometric picture of it as a PNG so I can see what it looks like, and b"
+keywords = ["skillnet", "parametric-cad-studio", "render-views"]
+
+[[task.authors]]
+name = "SkillNet Agent"
+
+[metadata]
+[metadata.skillnet]
+skill = "parametric-cad-studio"
+version = 2
+task = "render_iso_view"
+ability = "Render views"
+core = false
+source = "builder"
+judge = "programmatic"
+prompt = "I have a flange model, flange.step, but no CAD viewer on this computer. Please render an isometric picture of it as a PNG so I can see what it looks like, and briefly describe what the part looks like."
+
+[agent]
+timeout_sec = 900
+user = "agent"
+
+[verifier]
+timeout_sec = 600
+environment_mode = "separate"
+
+[environment]
+build_timeout_sec = 1800
+cpus = 2
+memory_mb = 4096
+workdir = "/task"
+network_mode = "allowlist"
+allowed_hosts = ["skillnet.sh"]
+
+[[environment.mcp_servers]]
+name = "skillnet"
+transport = "streamable-http"
+url = "https://skillnet.sh/mcp"
+
+[environment.mcp_servers.headers]
+Authorization = "Bearer ${SKILLNET_API_KEY}"

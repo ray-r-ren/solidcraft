@@ -1,0 +1,16 @@
+[
+  {
+    "title": "Flange with a six-hole bolt circle",
+    "kind": "image",
+    "input": "flange_steps.json",
+    "output": "flange_iso.png",
+    "caption": "An 80 mm flange, 8 mm thick, with a 30 mm bore and six 6 mm bolt holes on a 60 mm circle. Diameter, thickness, bolt size and bolt circle are named parameters. Measured volume is 33,200 mm³, matching the hand calculation."
+  },
+  {
+    "title": "Rounded open enclosure",
+    "kind": "image",
+    "input": "enclosure_steps.json",
+    "output": "enclosure_iso.png",
+    "caption": "A 60×40×25 mm box with 5 mm rounded corners, shelled to 2 mm walls with the top left open. Changing the length to 80 mm rebuilds it with all four rounds kept."
+  }
+]
